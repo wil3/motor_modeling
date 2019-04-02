@@ -1,4 +1,10 @@
 import serial, time, struct
+from msp_protocol import *
+from messages import MSPStatusMessage
+import signal
+import sys
+import time
+
 class MSP:
     VOLTAGE_METER_ID_NONE = 0
     VOLTAGE_METER_ID_BATTERY_1 = 10       # 10-19 for battery meters
@@ -66,6 +72,11 @@ class MSP:
     CURRENT_METER_ID_MSP_2 = 91
 
 
+    ARM_VALUE = 1990
+    RATE_MODE = 1990
+    STATE_DISARMED = 0
+    STATE_ARMED = 1
+    STATE_ARM_READY = 2
     def __init__(self, dstAddress, baudrate = 115200):
         self.ser = serial.Serial()
         self.ser.port = dstAddress
@@ -79,6 +90,7 @@ class MSP:
         self.ser.dsrdtr = False
         self.ser.writeTimeout = 2
 
+        self.flight_state = self.STATE_DISARMED
     def connect(self):
         """Time to wait until the board becomes operational"""
         wakeup = 2
@@ -91,7 +103,8 @@ class MSP:
             print("\n\nError opening "+self.ser.port+" port.\n"+str(error)+"\n\n")
 
     def close(self):
-        pass
+        self.ser.close()
+        sys.exit()
 
     def write(self, message):
         return self.ser.write(message)
@@ -104,6 +117,7 @@ class MSP:
         total_data.append(checksum)
         message = struct.pack('<3c2B%dHB' % len(data), *total_data)
         self.ser.write(message)
+        self.ser.flush()
 
 
     def is_checksum_valid(self, data, checksum):
@@ -160,42 +174,111 @@ class MSP:
         return payload
 
     def get_voltage(self):
-        self.sendCMD(0, 128, [])
-        payload = self.read()
-        if not payload:
-            return None
-        decoded = struct.unpack('<' + 'b'*len(payload), payload)
-        #print ("Decoded=", decoded)
-        assert len(decoded) % 2 == 0
-        voltage_meters = [] 
-        for i in range(int(len(decoded)/2)):
-            voltage_meter = {}
-            voltage_meter["id"] = decoded[i *2]
-            voltage_meter["value"] = decoded[i *2 + 1]
-            voltage_meters.append(voltage_meter)
-        #print (voltage_meters)
-        return voltage_meters
+        print ("Start read voltage")
+        try:
+            self.sendCMD(0, MSP_VOLTAGE_METERS, [])
+            payload = self.read()
+            if not payload:
+                return None
+            #print ("Payload=", len(payload))
+            decoded = struct.unpack('<' + 'b'*len(payload), payload)
+            #assert len(decoded) % 2 == 0
+            voltage_meters = [] 
+            for i in range(int(len(decoded)/2)):
+                voltage_meter = {}
+                voltage_meter["id"] = decoded[i *2]
+                voltage_meter["value"] = decoded[i *2 + 1]
+                voltage_meters.append(voltage_meter)
+            print ("t=", time.time(), " Voltage=", voltage_meters)
+            print ("End read voltage")
+            return voltage_meters
+        except Exception as e:
+            print ("Exception reading voltage ", e)
+            pass
 
     def get_current(self):
-        self.sendCMD(0, 129, [])
+        print ("Start read current")
+        try:
+            self.sendCMD(0, MSP_CURRENT_METERS, [])
+            payload = self.read()
+            if not payload:
+                return None
+            decoded = struct.unpack('<' + 'b'*len(payload), payload)
+            #print ("Decoded=", decoded)
+            #assert len(decoded) % 5 == 0
+            current_meters = [] 
+            for i in range(int(len(payload)/5)):
+                current_meter = {}
+                _id, mAhr, mA  = struct.unpack('<' + 'BHH', payload[i*5:i*5 + 5])
+                current_meter["id"] = _id
+                current_meter["mAhr"] = mAhr
+                current_meter["mA"] = mA
+                current_meters.append(current_meter)
+            print ("t=", time.time()," Current=", current_meters)
+        except:
+            pass
+        print ("End read current")
+
+    def get_status(self):
+        self.sendCMD(0, MSP_STATUS, [])
         payload = self.read()
         if not payload:
             return None
-        decoded = struct.unpack('<' + 'b'*len(payload), payload)
-        #print ("Decoded=", decoded)
-        assert len(decoded) % 5 == 0
-        current_meters = [] 
-        for i in range(int(len(payload)/5)):
-            current_meter = {}
-            _id, mAhr, mA  = struct.unpack('<' + 'BHH', payload[i*5:i*5 + 5])
-            current_meter["id"] = _id
-            current_meter["mAhr"] = mAhr
-            current_meter["mA"] = mA
-            current_meters.append(current_meter)
-        #print (current_meters)
+        unpacked = struct.unpack("<3HIB2HB", payload[:16])
+        msg = MSPStatusMessage()#direction=message.direction, size=message.size, data=message.data)
 
+        msg.dt = unpacked[0]
+        msg.ic2_error_count = unpacked[1]
+        msg.sensors = unpacked[2]
+        msg.flight_mode_flags = unpacked[3]
+        msg.pid_profile_index = unpacked[4]
+        msg.system_load = unpacked[5]
+        msg.gyro_cycle_time = unpacked[6]
+        msg.size_conditional_flight_mode_flags = unpacked[7]
 
+        # Second stage, conditional
+        unpacked2 = None
+        if msg.size_conditional_flight_mode_flags > 0:
+            unpacked2 = struct.unpack("<{}BBI".format(msg.size_conditional_flight_mode_flags), payload[16:])
+            msg.conditional_flight_mode_flags = unpacked2[:msg.size_conditional_flight_mode_flags]
+            msg.num_disarming_flags = unpacked2[msg.size_conditional_flight_mode_flags ]
+            msg.arming_disabled_flags = unpacked2[msg.size_conditional_flight_mode_flags + 1]
+        else:
+            unpacked2 = struct.unpack("<BI", payload[16:])
 
+            msg.num_disarming_flags = unpacked2[0]
+            msg.arming_disabled_flags = unpacked2[1]
+
+        self.status_callback(msg)
+
+    def status_callback(self, status):
+        #print("CALLBACK ", status.flight_mode_flags, "disable flags = ", status.arming_disabled_flags, " disable flag names ", status.get_arming_disabled_flags_by_name(), " enabled ", status.get_enabled_boxes())
+        if self.flight_state == self.STATE_DISARMED and status.arming_disabled_flags == 0:
+            self.flight_state = self.STATE_ARM_READY
+            self.message = MSPSetRawRCMessage(aux1=self.ARM_VALUE, aux2=self.RATE_MODE)
+            print("Arming...")
+        elif self.flight_state == self.STATE_ARM_READY and "BOXARM" in status.get_enabled_boxes():
+            self.flight_state = self.STATE_ARMED
+            #self.message = MSPSetRawRCMessage(r=1600, aux1=self.ARM_VALUE, aux2=self.RATE_MODE)
+        elif self.flight_state == self.STATE_ARMED:
+            self.message = MSPSetRawRCMessage(aux1=self.ARM_VALUE, aux2=self.RATE_MODE, max_r_rate=400, max_p_rate=400, max_y_rate=400)
+            self.message.set_r_rate(200)
+            print("Armed, sending command ", self.message)
+
+    def get_enabled_boxes(self):
+        names = []
+        bits = list(reversed("{0:b}".format(self.flight_mode_flags)))
+        #logger.debug("Modes={} to bits= {}", self.flight_mode_flags, bits)
+        for i in range(len(bits)):
+            if bits[i] == "1":
+                names.append(self.BOX_NAMES[i])
+        return names
+
+    def abort(self, signal, frame):
+        print ("Aborting!")
+        cmd = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+        self.sendCMD(16, MSP_SET_MOTOR, cmd)
+        self.close()
 
 def get_voltage_by_id(voltages, _id):
     for v in voltages:
@@ -209,26 +292,41 @@ def get_current_by_id(currents, _id):
             return c["mAh"]
     return None
 
+
 if __name__ == "__main__":
 
-    board = MSP("/dev/ttyACM0")
-    board.connect()
+    board = None
+    try:
+        board = MSP("/dev/ttyACM0")
+        signal.signal(signal.SIGINT, board.abort)
+        board.connect()
 
-    while True:
-        #board.getData(MultiWii.RAW_IMU)
-        #print board.rawIMU
+        while True:
+            #board.getData(MultiWii.RAW_IMU)
+            #print board.rawIMU
 
-        cmd = [1080, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
-        board.sendCMD(16, 214, cmd)
-        #time.sleep(0.01)
-        #board.getData(MultiWii.ANALOG)
-        #print ("START Get voltage")
-        #voltages = board.get_voltage()
-        #if voltages:
-        #    vbat = get_battery_voltage_by_id(voltages, MSP.VOLTAGE_METER_ID_BATTERY_1)
+            #board.get_status()
+            board.get_current()
+            board.get_voltage()
 
-        #currents = board.get_current()
-        #if currents:
-        #    i = get_current_by_id(MSP.CURRENT_METER_ID_BATTERY_1)
+            cmd = [1000, 1000, 1070, 1000, 1000, 1000, 1000, 1000]
+            board.sendCMD(16, MSP_SET_MOTOR, cmd)
 
+            time.sleep(0.01)
+            #board.getData(MultiWii.ANALOG)
+            #print ("START Get voltage")
+            #voltages = board.get_voltage()
+            #if voltages:
+            #    vbat = get_battery_voltage_by_id(voltages, MSP.VOLTAGE_METER_ID_BATTERY_1)
+
+            #currents = board.get_current()
+            #if currents:
+            #    i = get_current_by_id(MSP.CURRENT_METER_ID_BATTERY_1)
+    except Exception as e:
+        print ("Exception ", e)
+        if board:
+            # Stop spinning
+            cmd = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+            board.sendCMD(16, MSP_SET_MOTOR, cmd)
+            board.close()
 
