@@ -1,5 +1,6 @@
 from record_data import MSP
 from msp_protocol import *
+import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Capture motor data")
