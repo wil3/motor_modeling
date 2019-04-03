@@ -72,11 +72,14 @@ class MSP:
     CURRENT_METER_ID_MSP_2 = 91
 
 
+    MOTOR_MIN = 1000
+    MOTOR_MAX = 2000
     ARM_VALUE = 1990
     RATE_MODE = 1990
     STATE_DISARMED = 0
     STATE_ARMED = 1
     STATE_ARM_READY = 2
+
     def __init__(self, dstAddress, baudrate = 115200):
         self.ser = serial.Serial()
         self.ser.port = dstAddress
@@ -91,6 +94,9 @@ class MSP:
         self.ser.writeTimeout = 2
 
         self.flight_state = self.STATE_DISARMED
+
+        signal.signal(signal.SIGINT, self.abort)
+
     def connect(self):
         """Time to wait until the board becomes operational"""
         wakeup = 2
@@ -280,6 +286,31 @@ class MSP:
         self.sendCMD(16, MSP_SET_MOTOR, cmd)
         self.close()
 
+
+    def ramp(self, motor_id, start, end, duration):
+        """
+        Args: 
+            motor_id: 0-7 indicated by the betaflight mixer
+            start: value 1000 to 2000
+            end: value 1000 to 2000
+            duration: time in seconds
+        """
+
+        # We can only work in full integer steps so we are limited
+        # to a max of 1000 steps during a time period
+        motor_range = abs(end - start)
+        delta_motor_value = 1 if end - start > 0 else -1
+        delay = duration/motor_range
+        cmd = [self.MOTOR_MIN]*8
+
+        motor_value = start
+        while  step <= motor_range:
+            cmd[motor_id] = motor_value
+            board.sendCMD(16, MSP_SET_MOTOR, cmd)
+            time.sleep(delay)
+            motor_value += delta_motor_value
+            step += 1
+
 def get_voltage_by_id(voltages, _id):
     for v in voltages:
         if v["id"] == _id:
@@ -293,8 +324,8 @@ def get_current_by_id(currents, _id):
     return None
 
 
-if __name__ == "__main__":
 
+def test1():
     board = None
     try:
         board = MSP("/dev/ttyACM0")
@@ -322,6 +353,22 @@ if __name__ == "__main__":
             #currents = board.get_current()
             #if currents:
             #    i = get_current_by_id(MSP.CURRENT_METER_ID_BATTERY_1)
+    except Exception as e:
+        print ("Exception ", e)
+        if board:
+            # Stop spinning
+            cmd = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+            board.sendCMD(16, MSP_SET_MOTOR, cmd)
+            board.close()
+
+if __name__ == "__main__":
+
+    board = None
+    try:
+        board = MSP("/dev/ttyACM0")
+        board.connect()
+
+        board.ramp(0)
     except Exception as e:
         print ("Exception ", e)
         if board:
