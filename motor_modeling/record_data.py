@@ -307,7 +307,7 @@ class MSP:
         motor_value = start
         while  step <= motor_range:
             cmd[motor_id] = motor_value
-            board.sendCMD(16, MSP_SET_MOTOR, cmd)
+            self.sendCMD(16, MSP_SET_MOTOR, cmd)
             time.sleep(delay)
             motor_value += delta_motor_value
             step += 1
