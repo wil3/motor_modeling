@@ -4,6 +4,7 @@ from messages import MSPStatusMessage
 import signal
 import sys
 import time
+import argparse
 
 class MSP:
     VOLTAGE_METER_ID_NONE = 0
@@ -302,7 +303,7 @@ class MSP:
         delta_motor_value = 1 if end - start > 0 else -1
         delay = duration/motor_range
         cmd = [self.MOTOR_MIN]*8
-
+        step = 1
         motor_value = start
         while  step <= motor_range:
             cmd[motor_id] = motor_value
