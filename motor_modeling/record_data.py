@@ -96,7 +96,7 @@ class MSP:
 
         self.flight_state = self.STATE_DISARMED
 
-        signal.signal(signal.SIGINT, self.abort)
+        #signal.signal(signal.SIGINT, self.abort)
 
     def connect(self):
         """Time to wait until the board becomes operational"""

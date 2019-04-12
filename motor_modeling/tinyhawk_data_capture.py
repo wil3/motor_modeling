@@ -34,7 +34,8 @@ def send_motor(port, duration):
 def get_data(port, duration):
 
     test = test_rig(port)
-
+    test.read() # Primes the system
+    
     go.wait() # Wait until the Tinyhawk wakes up
 
     start_time = time.time()
@@ -69,7 +70,7 @@ if __name__ == "__main__":
 
     #have each thread save into memory a global array all data collecting add a timetamp merge in that way
     
-    with open(args.filename, "a") as f:
+    with open(args.filename, "a", newline='') as f:
         writer = csv.writer(f)
         for z in sensor_data:
             if (z != None):

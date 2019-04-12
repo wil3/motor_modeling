@@ -44,9 +44,9 @@ class test_rig:
 
                 self.thrust = (float(decodedLine[0]) + 41.7) / 89300
 
-                self.leftTorque = (float(decodedLine[1]) - 6340) / 2560000
+                self.leftTorque = (float(decodedLine[1]) + 6340) / -2560000
 
-                self.rightTorque = (float(decodedLine[2]) - 3580) / 2860000
+                self.rightTorque = (float(decodedLine[2]) + 3580) / 2860000
 
                 self.rpm = float(decodedLine[4])
 
