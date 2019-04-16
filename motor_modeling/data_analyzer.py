@@ -5,12 +5,14 @@ import math
 import argparse
 
 parser = argparse.ArgumentParser("Analyze motor data")
-parser.add_argument('--filename', help="", default="data.csv")
+parser.add_argument('--filename-ramp', help="", default="data.csv")
+parser.add_argument('--filename-rapid', help="", default="data.csv")
 args = parser.parse_args()
 
 maximums = [] # Thrust LeftT RightT RPM
 
-time, thrust, leftT, rightT, rpm = np.loadtxt(args.filename, delimiter=',', unpack=True)
+time, thrust, leftT, rightT, rpm = np.loadtxt(args.filename_ramp, delimiter=',', unpack=True)
+rTime, rThrust, e1, e2, e3 = np.loadtxt(args.filename_rapid, delimiter=',', unpack=True)
 
 # Plot construction
 figgy = p.figure()
@@ -89,10 +91,68 @@ print(indexList)
 maxRPM = int(np.median(indexList))
 maximums.append(rpm[maxRPM])
 
-print(maxThrust)
+print(maxRPM)
 rpmPlot.scatter(time[maxRPM], rpm[maxRPM], s=2, c='red')
 rpmPlot.annotate(rpm[maxRPM], (time[maxRPM], rpm[maxRPM]), textcoords='offset pixels', xytext=(5, 5))
 
+###############################################################################
+
+# The following is to calculate the timeConstantUp and timeConstantDown parameters.
+
+print('Computing time constants...')
+"""
+minIndex = np.where(rThrust == np.amin(rThrust))
+maxIndex = np.where(rThrust == np.amax(rThrust))
+
+print(minIndex)
+
+# The min index we want on the rising side is the one before the first maximum.
+# The first min index to be greater than the max is the minimum on the falling side.
+minRisingIndex = 0
+minFallingIndex = 0
+for z in minIndex:
+	if (z < maxIndex[0][0]):
+		minRisingIndex = z
+	else:
+		minFallingIndex = z
+		break
+
+"""
+epsilon = 0.01
+minRisingIndex = 0
+for z in range(len(rThrust)):
+	if (rThrust[z + 1] - rThrust[z] >= epsilon):
+		minRisingIndex = z
+		break
+
+maxRisingIndex = 0
+for z in range(len(rThrust) - minRisingIndex):
+	if (rThrust[z + 1 + minRisingIndex] - rThrust[z + minRisingIndex] <= epsilon):
+		maxRisingIndex = z + minRisingIndex
+		break
+
+maxFallingIndex = 0
+for z in range(len(rThrust) - maxRisingIndex):
+	if (rThrust[z + maxRisingIndex] - rThrust[z + 1 + maxRisingIndex] >= epsilon):
+		maxFallingIndex = z + maxRisingIndex
+		break
+
+minFallingIndex = 0
+for z in range(len(rThrust) - maxFallingIndex):
+	if (rThrust[z + maxFallingIndex] - rThrust[z + 1 + maxFallingIndex] <= epsilon):
+		minFallingIndex = z + maxFallingIndex
+		break
+
+timeConstantUp = rTime[maxRisingIndex] - rTime[minRisingIndex] 
+timeConstantDown = rTime[minFallingIndex] - rTime[maxFallingIndex]
+
+print(minRisingIndex, maxRisingIndex, maxFallingIndex, minFallingIndex)
+
+print('Time Constants:')
+timeConstants = 'timeConstantUp: {} | timeConstantDown: {}'.format(timeConstantUp, timeConstantDown)
+print(timeConstants)
+
+###############################################################################
 
 # Calculate motor constants
 dummyDiameter = 40 / 1000 # setup an argparser thing to get the diameter from the command line.

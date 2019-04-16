@@ -36,7 +36,7 @@ def get_data(port, duration):
     test = test_rig(port)
     test.read() # Primes the system
     
-    go.wait() # Wait until the Tinyhawk wakes up
+   # go.wait() # Wait until the Tinyhawk wakes up
 
     start_time = time.time()
     while (time.time() - start_time <= duration + 3):
@@ -56,16 +56,18 @@ if __name__ == "__main__":
     parser.add_argument('--port-receive', help="", default="/dev/ttyACM0")
     parser.add_argument('--duration', help="", default=1, type=float)
     parser.add_argument('--filename', help="", default="data.csv")
+    parser.add_argument('--mode', help="", default="")
 
     args = parser.parse_args()
 
     get_data_thread = threading.Thread(target=get_data, args = (args.port_receive, args.duration))
     get_data_thread.start()
 
-    send_motor_thread = threading.Thread(target=send_motor, args = (args.port_send, args.duration))
-    send_motor_thread.start()
+    if (args.mode != "rapid"):
+        send_motor_thread = threading.Thread(target=send_motor, args = (args.port_send, args.duration))
+        send_motor_thread.start()
+        send_motor_thread.join()
 
-    send_motor_thread.join()
     get_data_thread.join()
 
     #have each thread save into memory a global array all data collecting add a timetamp merge in that way
