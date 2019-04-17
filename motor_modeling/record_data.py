@@ -287,6 +287,10 @@ class MSP:
         self.sendCMD(16, MSP_SET_MOTOR, cmd)
         self.close()
 
+    def set(self, motor_id, motor_value):
+        cmd = [self.MOTOR_MIN]*8
+        cmd[motor_id] = motor_value
+        self.sendCMD(16, MSP_SET_MOTOR, cmd)
 
     def ramp(self, motor_id, start, end, duration):
         """

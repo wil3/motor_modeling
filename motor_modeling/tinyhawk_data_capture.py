@@ -12,7 +12,7 @@ import csv
 sensor_data = []
 go = threading.Event()
  
-def send_motor(port, duration):
+def send_motor(port, duration, mode):
     board = None
     try:
         board = MSP(port)
@@ -20,9 +20,16 @@ def send_motor(port, duration):
 
         go.set() # Activate the event flag to start data collection on time
 
-        board.ramp(1, 1000, 2000, duration/2)
-        time.sleep(1)
-        board.ramp(1, 2000, 1000, duration/2)
+        if (mode != 'step'):
+            board.ramp(1, 1000, 2000, duration/2)
+            time.sleep(1)
+            board.ramp(1, 2000, 1000, duration/2)
+        else:
+            board.set(1, 2000)
+            time.sleep(duration / 2)
+            board.set(1, 1000)
+            time.sleep(duration / 2)
+
     except Exception as e:
         print ("Exception ", e)
         if board:
@@ -36,7 +43,7 @@ def get_data(port, duration):
     test = test_rig(port)
     test.read() # Primes the system
     
-   # go.wait() # Wait until the Tinyhawk wakes up
+    go.wait() # Wait until the Tinyhawk wakes up
 
     start_time = time.time()
     while (time.time() - start_time <= duration + 3):
@@ -63,10 +70,9 @@ if __name__ == "__main__":
     get_data_thread = threading.Thread(target=get_data, args = (args.port_receive, args.duration))
     get_data_thread.start()
 
-    if (args.mode != "rapid"):
-        send_motor_thread = threading.Thread(target=send_motor, args = (args.port_send, args.duration))
-        send_motor_thread.start()
-        send_motor_thread.join()
+    send_motor_thread = threading.Thread(target=send_motor, args = (args.port_send, args.duration, args.mode))
+    send_motor_thread.start()
+    send_motor_thread.join()
 
     get_data_thread.join()
 
