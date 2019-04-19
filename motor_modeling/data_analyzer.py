@@ -11,8 +11,8 @@ args = parser.parse_args()
 
 maximums = [] # Thrust LeftT RightT RPM
 
-time, thrust, leftT, rightT, rpm = np.loadtxt(args.filename_ramp, delimiter=',', unpack=True)
-rTime, rThrust, e1, e2, e3 = np.loadtxt(args.filename_rapid, delimiter=',', unpack=True)
+time, command, thrust, leftT, rightT, rpm = np.loadtxt(args.filename_ramp, delimiter=',', unpack=True)
+rTime, rcommand, rThrust, e1, e2, e3 = np.loadtxt(args.filename_rapid, delimiter=',', unpack=True)
 
 # Plot construction
 figgy = p.figure()
@@ -40,66 +40,61 @@ rightTPlot.set_ylabel('Torque (N-m)')
 ###############################################################################
 
 # Max Thrust
-print('Computing max thrust...')
-indexList = np.where(thrust == np.amax(thrust))
-print(indexList)
+absoluteThrust = np.absolute(thrust)
+indexList = np.where(absoluteThrust == np.amax(thrabsoluteThrustust))
 
 maxThrust = int(np.median(indexList))
 maximums.append(thrust[maxThrust])
 
-print(maxThrust)
+print('Maximum Thrust: ', thrust[maxThrust])
 thrustPlot.scatter(time[maxThrust], thrust[maxThrust], s=2, c='red')
 thrustPlot.annotate(thrust[maxThrust], (time[maxThrust], thrust[maxThrust]), textcoords='offset pixels', xytext=(5, 5))
 
 ###############################################################################
 
 # Max Left Torque
-print('Computing max left torque...')
 absoluteLeftT = np.absolute(leftT)
 indexList = np.where(absoluteLeftT == np.amax(absoluteLeftT))
-print(indexList)
 
 maxLeftT = int(np.median(indexList))
 maximums.append(leftT[maxLeftT])
 
-print(maxLeftT)
 leftTPlot.scatter(time[maxLeftT], leftT[maxLeftT], s=2, c='red')
 leftTPlot.annotate(leftT[maxLeftT], (time[maxLeftT], leftT[maxLeftT]), textcoords='offset pixels', xytext=(5, 5))
 
 ###############################################################################
 
 # Max Right Torque
-print('Computing max right torque...')
 absoluteRightT = np.absolute(rightT)
 indexList = np.where(absoluteRightT == np.amax(absoluteRightT))
-print(indexList)
 
 maxRightT = int(np.median(indexList))
 maximums.append(rightT[maxRightT])
 
-print(maxRightT)
 rightTPlot.scatter(time[maxRightT], rightT[maxRightT], s=2, c='red')
 rightTPlot.annotate(rightT[maxRightT], (time[maxRightT], rightT[maxRightT]), textcoords='offset pixels', xytext=(5, 5))
+
+maxAverageTorque = (abs(leftT[maxLeftT]) + abs(rightT[maxRightT])) / 2
+print('Maximum Average Torque: ', maxAverageTorque)
 
 ###############################################################################
 
 # Max RPM
-print('Computing max RPM...')
-indexList = np.where(rpm == np.amax(rpm))
-print(indexList)
+maxCommand = np.where(command == np.amax(command))
 
-maxRPM = int(np.median(indexList))
+#indexList = np.where(rpm == np.amax(rpm))
+
+maxRPM = int(maxCommand[0])#int(np.median(indexList))
 maximums.append(rpm[maxRPM])
 
-print(maxRPM)
+print('Maximum RPM: ', rpm[maxRPM])
 rpmPlot.scatter(time[maxRPM], rpm[maxRPM], s=2, c='red')
-rpmPlot.annotate(rpm[maxRPM], (time[maxRPM], rpm[maxRPM]), textcoords='offset pixels', xytext=(5, 5))
+rpmPlot.annotate(rpm[maxRPM], (time[maxRPM], rpm[maxRPM]), textcoords='offset pixels', xytext=(15, 30))
 
 ###############################################################################
 
 # The following is to calculate the timeConstantUp and timeConstantDown parameters.
 
-print('Computing time constants...')
 """
 minIndex = np.where(rThrust == np.amin(rThrust))
 maxIndex = np.where(rThrust == np.amax(rThrust))
@@ -146,9 +141,6 @@ for z in range(len(rThrust) - maxFallingIndex):
 timeConstantUp = rTime[maxRisingIndex] - rTime[minRisingIndex] 
 timeConstantDown = rTime[minFallingIndex] - rTime[maxFallingIndex]
 
-print(minRisingIndex, maxRisingIndex, maxFallingIndex, minFallingIndex)
-
-print('Time Constants:')
 timeConstants = 'timeConstantUp: {} | timeConstantDown: {}'.format(timeConstantUp, timeConstantDown)
 print(timeConstants)
 
@@ -160,8 +152,7 @@ dummyDiameter = 40 / 1000 # setup an argparser thing to get the diameter from th
 motor_constant_ = maximums[0] / (4 * math.pi * maximums[3] ** 2)
 moment_constant_ = dummyDiameter * maximums[0] / maximums[2]
 
-consts = 'motor_constant_: {} | moment_constant_: {}'.format(motor_constant_, moment_constant_)
-print('Constants:')
+consts = timeConstants + ' ||| motor_constant_: {} | moment_constant_: {}'.format(motor_constant_, moment_constant_)
 print(consts)  
 
 p.figtext(0.5, 0.01, consts, va='bottom', ha='center')
