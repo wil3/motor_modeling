@@ -12,7 +12,7 @@
 #include <EEPROM.h>
 
 //HX711 constructor (dout pin, sck pin)
-HX711_ADC LoadCell_1(3, 2); // Right Load Cell
+HX711_ADC LoadCell_1(5, 4); // Right Load Cell
 HX711_ADC LoadCell_2(9, 7); // Left Load Cell
 HX711_ADC LoadCell_3(11, 12); // Thrust Load Cell
 
@@ -20,7 +20,14 @@ const int eepromAdress_1 = 0; // eeprom adress for calibration value load cell 1
 const int eepromAdress_2 = 4; // eeprom adress for calibration value load cell 2 (4 bytes)
 const int eepromAdress_3 = 8; 
 
-long t;
+const int photoPin = 2;
+volatile unsigned long count = 0;
+
+double t;
+
+void pulse() {
+  count++;
+} // end pulse
 
 void setup() {
   
@@ -56,6 +63,13 @@ void setup() {
   LoadCell_1.setCalFactor(calValue_1); // user set calibration value (float)
   LoadCell_2.setCalFactor(calValue_2); // user set calibration value (float)
   LoadCell_3.setCalFactor(calValue_3);
+
+  // Setup of Phototransistor
+  pinMode(photoPin, INPUT);
+  attachInterrupt(digitalPinToInterrupt(photoPin), pulse, CHANGE);
+
+  // Initialize t here
+  t = millis();
 }
 
 void loop() {
@@ -66,18 +80,30 @@ void loop() {
   LoadCell_3.update();
 
   //get smoothed value from data set + current calibration factor
-  if (millis() > t + 250) {
+  double currentTime = millis();
+  if (currentTime > t + 50) {
     float a = LoadCell_1.getData();
     float b = LoadCell_2.getData();
     float c = LoadCell_3.getData();
 
-    // Print format: <Thrust Load Cell> <TAB> <Left Load Cell> <TAB> <Right Load Cell>
+    // Because of the way we need to sense the voltages, we're using CHANGE for the interrupt. That means there's an extra factor of 2 we need to account for,
+    // and (if you do the math out) that's why it's 10,000 and not 20,000.
+    float d = 10000 * (count / (currentTime - t)); 
+
+    // Print format: <Thrust Load Cell> <TAB> <Left Load Cell> <TAB> <Right Load Cell> <TAB> <Phototransistor>
     Serial.print(c);
     Serial.print("  ");
     Serial.print(b);
     Serial.print("  ");
-    Serial.println(a);
+    Serial.print(a);
+    Serial.print("  ");
+    Serial.print(count);
+    Serial.print("  ");
+    Serial.println(d); 
+
+    // Indexing
     t = millis();
+    count = 0;
   }
 
   //receive from serial terminal

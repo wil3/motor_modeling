@@ -96,7 +96,10 @@ class MSP:
 
         self.flight_state = self.STATE_DISARMED
 
-        signal.signal(signal.SIGINT, self.abort)
+        #signal.signal(signal.SIGINT, self.abort)
+
+        self.current_ramp_motor_value = 0
+        self.running = False
 
     def connect(self):
         """Time to wait until the board becomes operational"""
@@ -319,6 +322,10 @@ class MSP:
         self.sendCMD(16, MSP_SET_MOTOR, cmd)
         self.close()
 
+    def set(self, motor_id, motor_value):
+        cmd = [self.MOTOR_MIN]*8
+        cmd[motor_id] = motor_value
+        self.sendCMD(16, MSP_SET_MOTOR, cmd)
 
     def ramp(self, motor_id, start, end, duration):
         """
@@ -337,12 +344,15 @@ class MSP:
         cmd = [self.MOTOR_MIN]*8
         step = 1
         motor_value = start
-        while  step <= motor_range:
+        while  step <= motor_range and self.running:
+            self.current_ramp_motor_value = motor_value
             cmd[motor_id] = motor_value
             self.sendCMD(16, MSP_SET_MOTOR, cmd)
             time.sleep(delay)
             motor_value += delta_motor_value
             step += 1
+        cmd = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+        self.sendCMD(16, MSP_SET_MOTOR, cmd)
 
 def get_voltage_by_id(voltages, _id):
     for v in voltages:

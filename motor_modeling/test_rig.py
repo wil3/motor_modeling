@@ -22,8 +22,13 @@ class test_rig:
     # Constructor
     #
     def __init__(self, dstAddress):
-        self.ser = serial.Serial(dstAddress)
+        self.ser = serial.Serial(dstAddress, baudrate=2000000)
         self.ser.flushInput()
+
+        self.thrust = 0
+        self.leftTorque = 0
+        self.rightTorque = 0
+        self.rpm = 0
 
     #
     # Methods
@@ -33,17 +38,24 @@ class test_rig:
         try:
             serialLine = self.ser.readline()
             decodedLine = serialLine.decode("utf-8").split()
+            #print("decodedLine ", decodedLine)
 
-            if len(decodedLine) == 3:
-                self.thrust = decodedLine[0]
-                self.leftTorque = decodedLine[1]
-                self.rightTorque = decodedLine[2]
+            if len(decodedLine) == 4:
 
-            return [rig.thrust, rig.leftTorque, rig.rightTorque]
+                self.thrust = (float(decodedLine[0]) + 41.7) / 89300
+
+                self.leftTorque = (float(decodedLine[1]) + 6340) / -2560000
+
+                self.rightTorque = (float(decodedLine[2]) + 3580) / 2860000
+
+                self.rpm = float(decodedLine[3])
+
+            return [self.thrust, self.leftTorque, self.rightTorque, self.rpm]
 
         except Exception as e:
             print(e)
 
+"""
 
 if __name__ == "__main__":
 
@@ -177,5 +189,5 @@ if __name__ == "__main__":
 
             print("Done.")
 
-        
+"""
         
