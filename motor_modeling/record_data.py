@@ -226,6 +226,38 @@ class MSP:
             pass
         print ("End read current")
 
+    def get_status2(self):
+        self.sendCMD(0, MSP_STATUS, [])
+        payload = self.read()
+        if not payload:
+            return None
+        unpacked = struct.unpack("<3HIB2HB", payload[:16])
+        msg = MSPStatusMessage()#direction=message.direction, size=message.size, data=message.data)
+
+        msg.dt = unpacked[0]
+        msg.ic2_error_count = unpacked[1]
+        msg.sensors = unpacked[2]
+        msg.flight_mode_flags = unpacked[3]
+        msg.pid_profile_index = unpacked[4]
+        msg.system_load = unpacked[5]
+        msg.gyro_cycle_time = unpacked[6]
+        msg.size_conditional_flight_mode_flags = unpacked[7]
+
+        # Second stage, conditional
+        unpacked2 = None
+        if msg.size_conditional_flight_mode_flags > 0:
+            unpacked2 = struct.unpack("<{}BBI".format(msg.size_conditional_flight_mode_flags), payload[16:])
+            msg.conditional_flight_mode_flags = unpacked2[:msg.size_conditional_flight_mode_flags]
+            msg.num_disarming_flags = unpacked2[msg.size_conditional_flight_mode_flags ]
+            msg.arming_disabled_flags = unpacked2[msg.size_conditional_flight_mode_flags + 1]
+        else:
+            unpacked2 = struct.unpack("<BI", payload[16:])
+
+            msg.num_disarming_flags = unpacked2[0]
+            msg.arming_disabled_flags = unpacked2[1]
+
+        return msg
+
     def get_status(self):
         self.sendCMD(0, MSP_STATUS, [])
         payload = self.read()
