@@ -33,3 +33,10 @@ Example use,
 ```
 python capture_motor_data.py --port-send COM5 --port-receive COM1 --motor 2 --duration 20 --filepath nf1_ramp_1100.csv --mode ramp
 ```
+
+Once you have collected your data run the analyzer to plot the results and
+generate the neccessary parameters,
+
+```
+python3 data_analyzer.py  --ramp-filepath --step-filepath
+```

@@ -2,7 +2,7 @@ import serial
 import csv
 import sys
 
-class test_rig:
+class ArduinoInterface:
 
     #
     # Global Class Variables

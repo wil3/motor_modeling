@@ -81,7 +81,7 @@ class MSP:
     STATE_ARMED = 1
     STATE_ARM_READY = 2
 
-    def __init__(self, dstAddress, baudrate = 115200):
+    def __init__(self, dstAddress, baudrate = 115200, enable_interrupt=False):
         self.ser = serial.Serial()
         self.ser.port = dstAddress
         self.ser.baudrate = baudrate
@@ -89,14 +89,12 @@ class MSP:
         self.ser.parity = serial.PARITY_NONE
         self.ser.stopbits = serial.STOPBITS_ONE
         self.ser.timeout = 0
-        self.ser.xonxoff = False
-        self.ser.rtscts = False
-        self.ser.dsrdtr = False
-        self.ser.writeTimeout = 2
+        self.ser.write_timeout = 1
 
         self.flight_state = self.STATE_DISARMED
 
-        #signal.signal(signal.SIGINT, self.abort)
+        if enable_interrupt:
+            signal.signal(signal.SIGINT, self.abort)
 
         self.current_ramp_motor_value = 0
         self.running = False
@@ -126,8 +124,8 @@ class MSP:
             checksum = checksum ^ i
         total_data.append(checksum)
         message = struct.pack('<3c2B%dHB' % len(data), *total_data)
-        self.ser.write(message)
-        self.ser.flush()
+        n = self.ser.write(message)
+        #self.ser.flush()
 
 
     def is_checksum_valid(self, data, checksum):
@@ -319,13 +317,16 @@ class MSP:
     def abort(self, signal, frame):
         print ("Aborting!")
         cmd = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+        self.running = False
         self.sendCMD(16, MSP_SET_MOTOR, cmd)
         self.close()
 
     def set(self, motor_id, motor_value):
         cmd = [self.MOTOR_MIN]*8
         cmd[motor_id] = motor_value
+        self.current_ramp_motor_value = motor_value
         self.sendCMD(16, MSP_SET_MOTOR, cmd)
+        self.read()
 
     def ramp(self, motor_id, start, end, duration):
         """
@@ -340,17 +341,24 @@ class MSP:
         # to a max of 1000 steps during a time period
         motor_range = abs(end - start)
         delta_motor_value = 1 if end - start > 0 else -1
-        delay = duration/motor_range
+        delay = max(0.01, duration/motor_range)# 0.01 is same value from BF configurator
         cmd = [self.MOTOR_MIN]*8
         step = 1
         motor_value = start
         while  step <= motor_range and self.running:
-            self.current_ramp_motor_value = motor_value
-            cmd[motor_id] = motor_value
-            self.sendCMD(16, MSP_SET_MOTOR, cmd)
-            time.sleep(delay)
-            motor_value += delta_motor_value
-            step += 1
+            try:
+                self.current_ramp_motor_value = motor_value
+                cmd[motor_id] = motor_value
+                self.sendCMD(16, MSP_SET_MOTOR, cmd)
+                # XXX IT APPEARS YOU MUST ALWAYS READ TO FLUSH I/O in linux
+                self.read()
+                time.sleep(delay) 
+                motor_value += delta_motor_value
+                step += 1
+
+                # XXX Debug
+            except Exception as e:
+                print("Exception sending motor command ", e)
         cmd = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
         self.sendCMD(16, MSP_SET_MOTOR, cmd)
 
@@ -408,10 +416,14 @@ if __name__ == "__main__":
 
     board = None
     try:
-        board = MSP("/dev/ttyACM0")
+        board = MSP("/dev/ttyACM0", enable_interrupt=True)
         board.connect()
 
-        board.ramp(0)
+        motor = 2
+        duration = 20.0
+        board.running = True
+        board.ramp(motor, 1000, 2000, duration/2)
+        board.ramp(motor, 2000, 1000, duration/2)
     except Exception as e:
         print ("Exception ", e)
         if board:
