@@ -127,6 +127,7 @@ max_right_torque = rightT[maxRightT_index]
 #ax_right_torque.annotate(rightT[maxRightT], (time[maxRightT], rightT[maxRightT]), textcoords='offset pixels', xytext=(5, 5))
 
 maxAverageTorque = (abs(max_left_torque) + abs(max_right_torque)) / 2
+
 print('Maximum Average Torque: ', maxAverageTorque)
 
 ###############################################################################
@@ -200,11 +201,27 @@ timeConstants = 'timeConstantUp: {} | timeConstantDown: {}'.format(timeConstantU
 # Calculate motor constants
 
 rev_per_second = max_rpm / 60.0
+n = rev_per_second
+D = args.prop_diameter/1000.0
+rho = 1.23
+
+Q = max(abs(max_left_torque), abs(max_right_torque))
+Ct0 = max_thrust/ (rho * np.power(n, 2) * np.power(D, 4))
+P = (Q * 2 * math.pi * n)
+Cq0 =  Q/(rho * np.power(n, 2) * np.power(D, 5))
+
 motor_constant_ = max_thrust / (4 * np.power(math.pi, 2) * np.power(rev_per_second, 2))
-moment_constant_ = np.power(args.prop_diameter/1000.0, 2) * max_thrust /maxAverageTorque
+moment_constant_ = np.power(D, 2) * max_thrust /Q
 
-consts = timeConstants + ' ||| motor_constant_: {} | moment_constant_: {}'.format(motor_constant_, moment_constant_)
+my_motor_constant = (Cq0 * D)/Ct0
 
+myMotorC = (Ct0 * rho * np.power(D, 4)) /np.power(2 * math.pi, 2)
+print ("Average Torque=", Q)
+print ("n=", n)
+print ("Ct0=", Ct0)
+print ("Cq0=", Cq0)
+print ("My moment constant ", my_motor_constant)
+print ("My motor constant ", myMotorC)
 
 rotor_velocity = rev_per_second * 2 * math.pi
 
