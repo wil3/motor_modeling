@@ -144,46 +144,28 @@ def main():
 
     # The following is to calculate the timeConstantUp and timeConstantDown parameters.
 
-    """
-    minIndex = np.where(rThrust == np.amin(rThrust))
-    maxIndex = np.where(rThrust == np.amax(rThrust))
-
-    print(minIndex)
-
-    # The min index we want on the rising side is the one before the first maximum.
-    # The first min index to be greater than the max is the minimum on the falling side.
+    epsilon = 1000 # +/- RPM from max
     minRisingIndex = 0
-    minFallingIndex = 0
-    for z in minIndex:
-            if (z < maxIndex[0][0]):
-                    minRisingIndex = z
-            else:
-                    minFallingIndex = z
-                    break
-
-    """
-    epsilon = 0.01
-    minRisingIndex = 0
-    for z in range(len(rThrust)):
-            if (rThrust[z + 1] - rThrust[z] >= epsilon):
+    for z in range(len(step_rpm)):
+            if (step_rpm[z] != 0):
                     minRisingIndex = z
                     break
 
     maxRisingIndex = 0
-    for z in range(len(rThrust) - minRisingIndex):
-            if (rThrust[z + 1 + minRisingIndex] - rThrust[z + minRisingIndex] <= epsilon):
+    for z in range(len(step_rpm) - minRisingIndex):
+            if (abs(max_rpm - step_rpm[z]) <= epsilon):
                     maxRisingIndex = z + minRisingIndex
                     break
 
     maxFallingIndex = 0
-    for z in range(len(rThrust) - maxRisingIndex):
-            if (rThrust[z + maxRisingIndex] - rThrust[z + 1 + maxRisingIndex] >= epsilon):
+    for z in range(len(step_rpm) - maxRisingIndex):
+            if (abs(max_rpm - step_rpm[z]) >= epsilon):
                     maxFallingIndex = z + maxRisingIndex
                     break
 
     minFallingIndex = 0
-    for z in range(len(rThrust) - maxFallingIndex):
-            if (rThrust[z + maxFallingIndex] - rThrust[z + 1 + maxFallingIndex] <= epsilon):
+    for z in range(len(step_rpm) - maxFallingIndex):
+            if (step_rpm == 0):
                     minFallingIndex = z + maxFallingIndex
                     break
 
@@ -264,7 +246,7 @@ class MetricGenerator:
         fig, ax1 = plt.subplots()
         ax1.plot(self.step_time, self.step_thrust, '*-')
         ax1.set_xlabel("Time (s)")
-        ax1.set_ylabel('Thrust (N)')
+        ax1.set_ylabel('RPM')
         color = 'r'
         label = "Motor Signal (%)"
         ax_command = ax1.twinx()
