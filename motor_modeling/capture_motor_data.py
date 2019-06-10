@@ -35,16 +35,19 @@ def send_motor(board, motor, port, duration, mode):
         time.sleep(1)
 
         if (mode != 'step'):
-            board.ramp(motor, 1000, 2000, duration/2)
+            board.ramp(motor, 1000, 2000)
             #time.sleep(1)
-            board.ramp(motor, 2000, 1000, duration/2)
+            board.ramp(motor, 2000, 1000)
         else:
-            board.set(motor, 2000)
-            time.sleep(0.5)
+            print ("RUNNING STEP!")
+            #max_speed = 1250
+            max_speed = 2000
+            board.set(motor, max_speed)
+            time.sleep(1)
             board.set(motor, 1000)
             #board.ramp(motor, 2000, 1000, duration)
 
-        time.sleep(5)
+        #time.sleep(5)
         board.running = False
         running = False
     except Exception as e:
@@ -62,41 +65,49 @@ def get_data(board, port, duration):
     arduino = ArduinoInterface(port)
     arduino.read() # Primes the system
     
-    go.wait() # Wait until the Tinyhawk wakes up
+    #go.wait() # Wait until the Tinyhawk wakes up
 
     start_time = time.time()
     #while (time.time() - start_time <= duration + 3) and running:
     while running:
+        # Blocked here so cant even get the right value 
+        # Should updat every 50ms
         read_line = arduino.read()
 
         if (read_line != None): 
             read_line.insert(0, time.time() - start_time)
-        read_line.insert(1, board.current_ramp_motor_value)
-        sensor_data.append(read_line)
-        print("Sensors: ", read_line)
+            if board:
+                read_line.insert(1, board.current_ramp_motor_value)
+            sensor_data.append(read_line)
+            print("Sensors: ", read_line)
+        #print("T=", time.time() - start_time, " CMD=", board.current_ramp_motor_value) 
     
 def main(args):
     signal.signal(signal.SIGINT, abort)
 
     global board
+    board = None
     board = MSP(args.port_send)
 
-    get_data_thread = threading.Thread(target=get_data, args = (board, args.port_receive, args.duration))
-    get_data_thread.start()
+    #get_data_thread = threading.Thread(target=get_data, args = (board, args.port_receive, args.duration))
+    #get_data_thread.start()
 
     send_motor_thread = threading.Thread(target=send_motor, args = (board, args.motor, args.port_send, args.duration, args.mode))
     send_motor_thread.start()
-
     send_motor_thread.join()
-    get_data_thread.join()
+    print ("DONE")
+
+    #get_data_thread.join()
 
     #have each thread save into memory a global array all data collecting add a timetamp merge in that way
     
+    """ 
     with open(args.filepath, "w", newline='') as f:
         writer = csv.writer(f)
         for z in sensor_data:
             if (z != None):
                 writer.writerow(z)
+    """
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Capture motor data")

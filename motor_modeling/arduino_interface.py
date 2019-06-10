@@ -40,7 +40,7 @@ class ArduinoInterface:
             decodedLine = serialLine.decode("utf-8").split()
             #print("decodedLine ", decodedLine)
 
-            if len(decodedLine) == 4:
+            if len(decodedLine) == 5:
 
                 self.thrust = (float(decodedLine[0]) + 41.7) / 89300
 
@@ -48,7 +48,8 @@ class ArduinoInterface:
 
                 self.rightTorque = (float(decodedLine[2]) + 3580) / 2860000
 
-                self.rpm = float(decodedLine[3])
+                
+                self.rpm = float(decodedLine[4])
 
             return [self.thrust, self.leftTorque, self.rightTorque, self.rpm]
 

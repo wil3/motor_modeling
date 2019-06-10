@@ -45,7 +45,7 @@ void setup() {
   //EEPROM.get(eepromAdress_1, calValue_1); // uncomment this if you want to fetch the value from eeprom
   //EEPROM.get(eepromAdress_2, calValue_2); // uncomment this if you want to fetch the value from eeprom
   
-  Serial.begin(9600); delay(10);
+  Serial.begin(2000000); delay(10);
   LoadCell_1.begin();
   LoadCell_2.begin();
   LoadCell_3.begin();

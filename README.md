@@ -1,3 +1,10 @@
+# Install
+
+1) Create virtual environment 
+2) Activate
+3) pip3 install -r requirements.txt
+
+# Run
 This repo holds a collection of scripts for computing parameters to be used
 with the PX4 style motor models.
 
@@ -40,3 +47,10 @@ generate the neccessary parameters,
 ```
 python3 data_analyzer.py  --ramp-filepath --step-filepath
 ```
+
+
+
+# Circuit Diagram
+
+NOTE! On Ubuntu (All systems?) you must disconnect the RESET pin in order to
+upload the sketch.

@@ -328,7 +328,7 @@ class MSP:
         self.sendCMD(16, MSP_SET_MOTOR, cmd)
         self.read()
 
-    def ramp(self, motor_id, start, end, duration):
+    def ramp(self, motor_id, start, end):
         """
         Args: 
             motor_id: 0-7 indicated by the betaflight mixer
@@ -341,7 +341,8 @@ class MSP:
         # to a max of 1000 steps during a time period
         motor_range = abs(end - start)
         delta_motor_value = 1 if end - start > 0 else -1
-        delay = max(0.01, duration/motor_range)# 0.01 is same value from BF configurator
+        #delay = max(0.01, duration/motor_range)# 0.01 is same value from BF configurator
+        delay = 0.02
         cmd = [self.MOTOR_MIN]*8
         step = 1
         motor_value = start
@@ -349,10 +350,15 @@ class MSP:
             try:
                 self.current_ramp_motor_value = motor_value
                 cmd[motor_id] = motor_value
+                start_time = time.time()
                 self.sendCMD(16, MSP_SET_MOTOR, cmd)
                 # XXX IT APPEARS YOU MUST ALWAYS READ TO FLUSH I/O in linux
                 self.read()
-                time.sleep(delay) 
+                lapse_time = time.time() - start_time
+                #print ("\tLapse time ", lapse_time)
+
+                if lapse_time < delay:
+                    time.sleep(delay - lapse_time) 
                 motor_value += delta_motor_value
                 step += 1
 
@@ -418,12 +424,16 @@ if __name__ == "__main__":
     try:
         board = MSP("/dev/ttyACM0", enable_interrupt=True)
         board.connect()
+        delay = 0.01
+        while True:
+            start_time = time.time()
+            msg = board.get_status2()
+            lapse_time = time.time() - start_time
+            if msg:
+                print ("T={} Load={}".format(lapse_time, msg.system_load))
+            if lapse_time < delay:
+                time.sleep(delay - lapse_time)
 
-        motor = 2
-        duration = 20.0
-        board.running = True
-        board.ramp(motor, 1000, 2000, duration/2)
-        board.ramp(motor, 2000, 1000, duration/2)
     except Exception as e:
         print ("Exception ", e)
         if board:
