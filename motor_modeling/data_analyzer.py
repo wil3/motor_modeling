@@ -10,6 +10,8 @@ from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 
+import  scipy.stats as st
+import matplotlib.ticker as mtick
 
 class MetricGenerator:
     def __init__(self, prop_diameter, ramp_file, step_file):
@@ -152,7 +154,7 @@ class MetricGenerator:
             start_time += step_size
             end_time = start_time + size
 
-        return ts, rpms, lows, highs
+        return np.array(ts), np.array(rpms), lows, highs
 
     def plot_step(self):
         fig, ax = plt.subplots()
@@ -238,10 +240,13 @@ class MetricGenerator:
 
 
         """
-        t, command, thrusts, torques, rpms = self._trim_ramp_metrics()
+        ts, _, thrusts, _, rpms, _ = self._trim_ramp_metrics()
+        window_size = 0.2
+        t, T, low_T, high_T = self._sliding_window(ts, thrusts, stop_time=45, size=window_size)
+        _, ave_rpm, low_RPM, high_RPM = self._sliding_window(ts, rpms, stop_time=45, size=window_size)
 
-        T = np.average(thrusts, axis=0)
-        ave_rpm = np.average(rpms, axis=0)
+        #T = np.average(thrusts, axis=0)
+        #ave_rpm = np.average(rpms, axis=0)
         n = ave_rpm / 60.0
 
         min_rpm = 5000
@@ -277,27 +282,17 @@ class MetricGenerator:
 
             min_l = np.minimum(len(Ct0_ramp_up), len(Ct0_ramp_down))
             ave_Ct0 = np.average([Ct0_ramp_up[:min_l], Ct0_ramp_down[:min_l]])
+            #ave_Ct0 = np.average(Ct0_ramp_up)
             print ("Average Ct0=", ave_Ct0)
 
-            """
-            print("UP RPM=",ramp_up_rpm)
-            print ("UP T=", ramp_up_thrust)
-            print (Ct0_ramp_up)
-            print ("DOWN")
-
-            #print (ramp_down_n)
-            print ("DOWN RPM", ramp_down_rpm)
-            print ("DOWN T=", ramp_down_thrust)
-            print (Ct0_ramp_down)
-            """
-
             fig, ax = plt.subplots()
-            ax.plot(ramp_up_rpm, Ct0_ramp_up, color='tab:orange', marker='.')
-            ax.plot(ramp_down_rpm, Ct0_ramp_down, '.', color='tab:blue', )
-            ax.axhline(ave_Ct0, color='r')
+            ax.plot(ramp_up_rpm, Ct0_ramp_up, color='tab:orange',linestyle='None', marker='x', label="Accel")
+            ax.plot(ramp_down_rpm, Ct0_ramp_down,linestyle='None', marker='.', color='tab:blue', label="Decel")
+            ax.axhline(ave_Ct0, color='r', label="Average $C_{t0}$")
             #ax.plot(ave_rpm[max_throttle_index:], Ct0[max_throttle_index:], color='tab:blue', marker='.')
 
 
+            ax.legend()
             ax.set_xlabel("RPM")
             ax.set_ylabel('$C_{t0}$')
         plt.show()
@@ -305,8 +300,70 @@ class MetricGenerator:
     def c_q_static(self, n, Q):
         return  Q/(self.rho * np.power(n, 2) * np.power(self.D, 5))
 
-
     def plot_c_q_static(self):
+        """ Plot the C_t0, the thurst coefficient for static conditions
+
+
+        """
+        ts, _, _, Q, rpms, _ = self._trim_ramp_metrics()
+        window_size = 0.2
+        t, Q, low_T, high_T = self._sliding_window(ts, Q, stop_time=45, size=window_size)
+        _, ave_rpm, low_RPM, high_RPM = self._sliding_window(ts, rpms, stop_time=45, size=window_size)
+
+        #T = np.average(thrusts, axis=0)
+        #ave_rpm = np.average(rpms, axis=0)
+        n = ave_rpm / 60.0
+
+        min_rpm = 5000
+
+        max_throttle_index = np.argmax(ave_rpm)
+
+        min_rpm_index = 0
+        for i in range(len(ave_rpm)):
+            if ave_rpm[i] > min_rpm:
+                min_rpm_index = i
+                break
+
+        ramp_up_q = Q[min_rpm_index:max_throttle_index]
+        ramp_up_rpm = ave_rpm[min_rpm_index:max_throttle_index]
+        ramp_up_n = n[min_rpm_index:max_throttle_index]
+
+        min_rpm_index = 0
+        for i in range(len(ave_rpm)-1, -1, -1):
+            if ave_rpm[i] > min_rpm:
+                min_rpm_index = i
+                break
+
+        #Flip reverses the array
+        ramp_down_q = np.flip(Q[max_throttle_index:min_rpm_index])
+        ramp_down_rpm = np.flip(ave_rpm[max_throttle_index:min_rpm_index])
+        ramp_down_n = np.flip(n[max_throttle_index:min_rpm_index])
+        
+        with np.errstate(divide='ignore', invalid='ignore'):
+            Cq0_ramp_up = self.c_q_static(ramp_up_n, ramp_up_q) 
+            Cq0_ramp_up[Cq0_ramp_up == np.inf] = 0
+
+            Cq0_ramp_down = self.c_q_static(ramp_down_n, ramp_down_q) 
+            Cq0_ramp_down[Cq0_ramp_down == np.inf] = 0
+
+            min_l = np.minimum(len(Cq0_ramp_up), len(Cq0_ramp_down))
+            ave_Cq0 = np.average([Cq0_ramp_up[:min_l], Cq0_ramp_down[:min_l]])
+            #ave_Ct0 = np.average(Ct0_ramp_up)
+            print ("Average Cq0=", ave_Cq0)
+
+            fig, ax = plt.subplots()
+            ax.plot(ramp_up_rpm, Cq0_ramp_up, color='tab:orange',linestyle='None', marker='x', label="Accel")
+            ax.plot(ramp_down_rpm, Cq0_ramp_down,linestyle='None', marker='.', color='tab:blue', label="Decel")
+            ax.axhline(ave_Cq0, color='r', label="Average $C_{q0}$")
+            #ax.plot(ave_rpm[max_throttle_index:], Ct0[max_throttle_index:], color='tab:blue', marker='.')
+
+
+            ax.legend()
+            ax.set_xlabel("RPM")
+            ax.set_ylabel('$C_{q0}$')
+        plt.show()
+
+    def plot_c_q_static2(self):
         fig, ax = plt.subplots()
 
         t, command, thrusts, torques, rpms, names = self._trim_ramp_metrics()
@@ -370,6 +427,175 @@ class MetricGenerator:
         """
         ax.legend(loc='upper left')
         plt.show()
+
+
+
+    def plot_t_q(self):
+        fig, ax = plt.subplots()
+        ts, _, Ts, Qs, rpms, _ = self._trim_ramp_metrics()
+
+        x = np.arange(8000, 21e3, 1000) 
+
+        qs_up = []
+        qs_down = []
+        for i in range(len(ts)):
+            rpm = rpms[i]
+            max_rpm_index = np.argmax(rpm)
+
+            y = [] # This is accel
+            for s in x:
+                id_rpm = (np.abs(rpm[:max_rpm_index] - s)).argmin()
+                Q = Qs[i][id_rpm]
+                T = Ts[i][id_rpm]
+                y.append(Q)
+            qs_up.append(y)
+            y = [] # This is accel
+            for s in x:
+                id_rpm = max_rpm_index + (np.abs(rpm[max_rpm_index:] - s)).argmin()
+                print ("i=", id_rpm, "RPM Sample=", s, " RPM=", rpm[id_rpm])
+                Q = Qs[i][id_rpm]
+                T = Ts[i][id_rpm]
+                #print ("RPM=", s, " Q=", Q)
+                y.append(Q)
+            qs_down.append(y)
+
+            #ax.plot(rpm, Qs[i], linestyle="None", marker=',')
+            #ax.plot(ts[i], rpm)
+        ax.set_xlabel("RPM")
+        ax.set_ylabel('Q')
+        mu = np.mean(qs_up, axis=0)
+        ax.plot(x, mu, color='g')
+        mu = np.mean(qs_down, axis=0)
+        ax.plot(x, mu, color='r', linestyle='--', marker='o')
+
+
+        """
+        ax2 = ax.twinx()
+        color='r'
+        ax2.plot(rpm, Ts[i], color='r')
+        ax2.set_ylabel("T", color=color)
+        ax2.tick_params(axis='y', labelcolor=color)
+        """
+        plt.show()
+
+    def plot_kq(self):
+        fig, ax = plt.subplots()
+        ts, _, Ts, Qs, rpms, _ = self._trim_ramp_metrics()
+        rpm_samples = np.arange(8000, 21e3, 1000) 
+        ys = []
+        for i in range(len(ts)):
+            rpm = rpms[i]
+            max_throttle_index = np.argmax(rpm)
+            min_rpm = 7500
+            max_rpm_index = np.argmax(rpm)
+
+            # Get the index so we can get the T and Q there too
+            x = []
+            y = []
+            for s in rpm_samples:
+                # This is accel
+                id_rpm = (np.abs(rpm[:max_rpm_index] - s)).argmin()
+                Q = Qs[i][id_rpm]
+                T = Ts[i][id_rpm]
+                rpm_accel = rpm[id_rpm]
+                kq = Q/T
+                x.append(rpm_accel)
+                y.append(kq)
+            ys.append(y)
+            # Decel
+            x = []
+            y = []
+            for s in rpm_samples:
+                # This is decel
+                id_rpm = max_rpm_index + (np.abs(rpm[max_rpm_index:] - s)).argmin()
+                Q = Qs[i][id_rpm]
+                T = Ts[i][id_rpm]
+                rpm_accel = rpm[id_rpm]
+                kq = Q/T
+                x.append(rpm_accel)
+                y.append(kq)
+            ys.append(y)
+            #ax.plot(rpm, Qs[i], color='b')
+            #ax.plot(rpm, Ts[i], color='r')
+            #ax.plot(x, y)
+
+        mu = np.mean(ys, axis=0)
+        sigma = np.std(ys, axis=0)
+        scale = sigma/np.sqrt(len(rpm_samples))
+        interval = st.norm.interval(0.95, loc=mu, scale=scale)
+        lb = interval[0]
+        ub = interval[1]
+
+        color='b'
+        plt.fill_between(rpm_samples, ub, lb, color=color, alpha=.3)
+        ax.plot(rpm_samples, mu, '-o')
+        ax.axhline(np.mean(ys), color='r', linestyle='--')
+
+        ax.set_xlabel("RPM")
+        ax.set_ylabel('$K_{Q}$')
+        plt.show()
+
+    def plot_kt(self):
+        fig, ax = plt.subplots()
+        ts, _, Ts, Qs, rpms, _ = self._trim_ramp_metrics()
+        rpm_samples = np.arange(8000, 21e3, 1000) 
+        ys = []
+        for i in range(len(ts)):
+            rpm = rpms[i]
+            max_throttle_index = np.argmax(rpm)
+            min_rpm = 7500
+            max_rpm_index = np.argmax(rpm)
+
+            # Get the index so we can get the T and Q there too
+            x = []
+            y = []
+            for s in rpm_samples:
+                # This is accel
+                id_rpm = (np.abs(rpm[:max_rpm_index] - s)).argmin()
+                Q = Qs[i][id_rpm]
+                T = Ts[i][id_rpm]
+                rpm_accel = rpm[id_rpm]
+                kt = self.c_t_static(s/60, T) * self.rho * np.power(self.D, 4)/np.power(2*math.pi, 2)
+                x.append(rpm_accel)
+                y.append(kt)
+            ys.append(y)
+            # Decel
+            x = []
+            y = []
+            for s in rpm_samples:
+                # This is decel
+                id_rpm = max_rpm_index + (np.abs(rpm[max_rpm_index:] - s)).argmin()
+                Q = Qs[i][id_rpm]
+                T = Ts[i][id_rpm]
+                rpm_accel = rpm[id_rpm]
+                kt = self.c_t_static(s/60, T) * self.rho * np.power(self.D, 4)/np.power(2*math.pi, 2)
+                #print ("Kt=", kt)
+                x.append(rpm_accel)
+                y.append(kt)
+            ys.append(y)
+            #ax.plot(rpm, Qs[i], color='b')
+            #ax.plot(rpm, Ts[i], color='r')
+            #ax.plot(x, y)
+
+        mu = np.mean(ys, axis=0)
+        sigma = np.std(ys, axis=0)
+        scale = sigma/np.sqrt(len(rpm_samples))
+        interval = st.norm.interval(0.95, loc=mu, scale=scale)
+        lb = interval[0]
+        ub = interval[1]
+
+        color='b'
+        plt.fill_between(rpm_samples, ub, lb, color=color, alpha=.3)
+        ax.plot(rpm_samples, mu, '-o')
+        mu = np.mean(ys)
+        ax.axhline(mu, color='r', linestyle='--')
+        print ("Average Kt=", mu)
+        ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%.2e'))
+
+        ax.set_xlabel("RPM")
+        ax.set_ylabel('$K_{T}$')
+        plt.show()
+
 
     def split_ramp(self, fn=np.average, min_rpm=5000):
         t, command, thrusts, torques, rpms = self._trim_ramp_metrics()
@@ -446,6 +672,8 @@ class MetricGenerator:
 
     def _trim_ramp_metrics(self):
         """
+        Trim each one o fhte data files
+        so they are the same end length
         Return:
             t 2D array
             command 1D array
@@ -694,10 +922,10 @@ class MetricGenerator:
         "/home/wil/workspace/gymfc-nf1/digitaltwin/data/oscilliscope/step_100.csv"
         ]
         labels = [
-            "25%-Actual",
-            "50%-Actual",
-            "75%-Actual",
-            "100%-Actual",
+            "25%-Measured",
+            "50%-Measured",
+            "75%-Measured",
+            "100%-Measured",
         ]
         filename = [
             "25", 
@@ -810,10 +1038,10 @@ class MetricGenerator:
         "/home/wil/workspace/gymfc-nf1/digitaltwin/data/sim/step_100.csv"
         ]
         labels = [
-            "25%-Sim",
-            "50%-Sim",
-            "75%-Sim",
-            "100%-Sim",
+            "25%-Simulated",
+            "50%-Simulated",
+            "75%-Simulated",
+            "100%-Simulated",
         ]
         for i in range(len(fs)):
             data = np.loadtxt(fs[i], delimiter=",", skiprows=1)
@@ -833,12 +1061,18 @@ class MetricGenerator:
         cmd_25 = [0.25, 0.25, 0, 0]
         cmds = [cmd_1, cmd_75, cmd_5, cmd_25]
         t_cmd = [0, 1, 1, 2]
-        label = "Control Signal"
+        label = "Control Signal (%)"
         ax_command = ax.twinx()
         p = np.poly1d(coef)
+        tick_positions = []
         for cmd in cmds:
-            ax_command.plot(t_cmd, p(cmd)/p(1), color="k", alpha=0.5)
+            # WHy are we scaling?
+            y = p(cmd)/p(1)
+            tick_positions.append(p(cmd[0])/p(1))
+            ax_command.plot(t_cmd, y , color="k", alpha=0.5)
 
+        ax_command.set_yticks(tick_positions)
+        ax_command.set_yticklabels(["100", "75", "50", "25"])
 
         ax_command.set_xlim(0)
         ax_command.set_ylabel(label)
@@ -853,8 +1087,12 @@ class MetricGenerator:
     def plot_motor_velocity_vs_control(self, max_rpms):
         x_u = np.array([0, .25, .5, .75, 1])
 
+        units = "rpm"
         # XXX THIS IS ACTUALLY RADIANS
-        y_rpm = np.array([0] + max_rpms) * 0.10472
+        if units == "rpm":
+            y_rpm = np.array([0] + max_rpms)
+        else:
+            y_rpm = np.array([0] + max_rpms) * 0.10472
         xx = np.linspace(x_u.min(),x_u.max(), 10000)
 
 
@@ -863,14 +1101,63 @@ class MetricGenerator:
         p = np.poly1d(coef)
         print (p)
         fig, ax = plt.subplots()
-        ax.set_ylabel("Rotor Velocity (rad/s)")
-        ax.set_xlabel("Control signal (u)")
+        if units == "rpm":
+            ax.set_ylabel("RPM")
+        else:
+            ax.set_ylabel("Rotor Velocity (rad/s)")
+        ax.set_xlabel("Control signal (%)")
+        ax.set_xticks(x_u)
+        ax.set_xticklabels(["0", "25", "50", "75", "100"])
         ax.plot(x_u, y_rpm, "o", label="Measured")
         ax.plot([0, 1], [0, y_rpm[-1]], linestyle="--", color='r', label="Linear reference")
         ax.plot(xx, p(xx), label="Fitted: ${:.2f}x^2 + {:.2f}x + {:.2f}$".format(*coef))
         ax.legend()
 
+    def find_delta(self):
+        filename = [
+            "25", 
+            "50", 
+            "75", 
+            "100"
+        ]
+        # From scope
+        fig, ax = plt.subplots()
+        max_rpms = []
+        slopes = []
+        decel = []
+        for i in range(len(filename)):
+            f_ = "/home/wil/workspace/gymfc-nf1/digitaltwin/data/oscilliscope/processed/rpm_{}.csv".format(filename[i])
+            if os.path.isfile(f_):
+                print ("Loading data")
+                data = np.loadtxt(f_, delimiter=",", skiprows=1)
+                ts = data[:,0]#[:1000]
+                rpms = data[:,1]#[:1000]
 
+                max_rpm = np.amax(rpms)
+                half_rpm = max_rpm/2
+                print ("Max RPM = ", max_rpm)
+                ax.plot(ts, rpms)
+                idx_accel = (np.abs(rpms[:len(rpms) // 2] - half_rpm)).argmin()
+                ax.axvline(ts[idx_accel])
+                xx = ts[idx_accel-1] - ts[idx_accel]
+                yy = rpms[idx_accel-1] - rpms[idx_accel] 
+                m = yy/xx
+                slopes.append(m)
+                print ("m=", m)
+
+                half_idx = len(rpms) // 2
+                idx_decel = half_idx +(np.abs(rpms[len(rpms) // 2:] - half_rpm)).argmin()
+                ax.axvline(ts[idx_decel])
+                xx = ts[idx_decel-1] - ts[idx_decel]
+                yy = rpms[idx_decel-1] - rpms[idx_decel] 
+
+                decel.append(yy/xx)
+
+        ave_m = np.average(slopes)/1e3
+        print ("ACCEL M ave per step=", ave_m)
+
+        print ("DECEL M", np.average(decel)/1e3)
+        plt.show()
     def parse_scope(self, ts, vs):
         threshold_low = 1.2
         threshold_high = 1.5
@@ -971,8 +1258,12 @@ if __name__ == "__main__":
 
     mg = MetricGenerator(args.prop_diameter/1000.0, args.ramp_filepath, args.step_filepath)
 
-    mg.parse_scopes()
+    #mg.parse_scopes()
     #mg.plot_c_q_static()
+    #mg.plot_kq()
+    #mg.plot_kt()
+    #mg.plot_t_q()
+
     #mg.plot_c_t_static()
     #mg.plot_moment_constant()
     #mg.plot_force()
@@ -980,5 +1271,6 @@ if __name__ == "__main__":
     #mg.plot_rpm()
     #mg.plot_step()
     #mg.plot_force_rpm()
+    mg.find_delta()
 
 
